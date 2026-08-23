@@ -1,0 +1,23 @@
+# 微信群聊日报生成器
+# 一个把微信群聊消息拉出来、用 AI 生成日报的命令行工具
+
+[project]
+name = "wxsummary"
+version = "0.1.0"
+description = "微信群聊日报生成器 - 拉取群聊消息并用 AI 生成每日总结"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.1",
+    "python-dotenv>=1.0",
+    "openai>=1.0",
+]
+
+[project.scripts]
+wxsummary = "wxsummary.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
