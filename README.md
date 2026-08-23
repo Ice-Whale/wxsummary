@@ -64,6 +64,7 @@ wxsummary week                     # 本周（周一到今天）的 AI 周报
 wxsummary today --no-ai            # 不调 AI，只看每个群发了哪些原始消息
 wxsummary today --include-direct   # 也包含私聊
 wxsummary today -o ~/Desktop/x.md  # 指定输出路径
+wxsummary today --force            # 强制重新导出（即使导出文件已是最新）
 ```
 
 日报输出到 `reports/`：`2026-08-23_report.md`（AI 版）/ `2026-08-23_raw.md`（原始版）。
@@ -75,10 +76,14 @@ wxsummary today -o ~/Desktop/x.md  # 指定输出路径
 
 ```bash
 wxsummary sync --days 7   # 只刷新 wechat_messages.json，不生成日报
+wxsummary sync --force    # 强制重新导出（忽略 freshness 判断）
 wxsummary info            # 看导出数据统计
 ```
 
 > 某天没消息？导出范围没覆盖，用 `wxsummary sync --days N` 调大回溯天数。
+>
+> 默认会「跳过已是当天的导出」：若导出文件的修改时间不早于被查询日期当天零点，就复用旧文件，
+> 不重复解密导出，节省时间。需要强制重新导出时加 `--force`。
 
 ## 项目结构
 

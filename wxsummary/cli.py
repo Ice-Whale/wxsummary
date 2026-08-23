@@ -11,7 +11,7 @@
 """
 
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import click
@@ -41,11 +41,12 @@ def main():
 @click.option("--no-ai", is_flag=True, help="不调用 AI，只输出原始消息列表")
 @click.option("--include-direct", is_flag=True, help="也包含私聊（默认只统计群聊）")
 @click.option("--output", "-o", type=click.Path(), help="输出文件路径（默认 reports/日期.md）")
-def today(no_ai: bool, include_direct: bool, output: str):
+@click.option("--force", "-f", is_flag=True, help="强制重新导出（即使导出文件已是最新）")
+def today(no_ai: bool, include_direct: bool, output: str, force: bool):
     """生成今天的群聊日报"""
     d = date.today()
     run_report(d, d, f"{d.isoformat()}", "日报", no_ai, include_direct, output,
-               output_name=f"{d.isoformat()}")
+               output_name=f"{d.isoformat()}", force=force)
 
 
 @main.command(name="date")
@@ -53,7 +54,8 @@ def today(no_ai: bool, include_direct: bool, output: str):
 @click.option("--no-ai", is_flag=True, help="不调用 AI，只输出原始消息列表")
 @click.option("--include-direct", is_flag=True, help="也包含私聊")
 @click.option("--output", "-o", type=click.Path(), help="输出文件路径")
-def date_cmd(date_str: str, no_ai: bool, include_direct: bool, output: str):
+@click.option("--force", is_flag=True, help="强制重新导出（即使导出文件已是最新）")
+def date_cmd(date_str: str, no_ai: bool, include_direct: bool, output: str, force: bool):
     """生成指定日期的群聊日报（DATE 格式 YYYY-MM-DD）"""
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -61,18 +63,19 @@ def date_cmd(date_str: str, no_ai: bool, include_direct: bool, output: str):
         click.echo(f"❌ 日期格式错误：{date_str}，请用 YYYY-MM-DD", err=True)
         sys.exit(1)
     run_report(d, d, f"{d.isoformat()}", "日报", no_ai, include_direct, output,
-               output_name=f"{d.isoformat()}")
+               output_name=f"{d.isoformat()}", force=force)
 
 
 @main.command(name="yesterday")
 @click.option("--no-ai", is_flag=True, help="不调用 AI，只输出原始消息列表")
 @click.option("--include-direct", is_flag=True, help="也包含私聊")
 @click.option("--output", "-o", type=click.Path(), help="输出文件路径")
-def yesterday_cmd(no_ai: bool, include_direct: bool, output: str):
+@click.option("--force", is_flag=True, help="强制重新导出（即使导出文件已是最新）")
+def yesterday_cmd(no_ai: bool, include_direct: bool, output: str, force: bool):
     """生成昨天的群聊日报"""
     d = date.today() - timedelta(days=1)
     run_report(d, d, f"{d.isoformat()}", "日报", no_ai, include_direct, output,
-               output_name=f"{d.isoformat()}")
+               output_name=f"{d.isoformat()}", force=force)
 
 
 @main.command()
@@ -81,7 +84,9 @@ def yesterday_cmd(no_ai: bool, include_direct: bool, output: str):
 @click.option("--no-ai", is_flag=True, help="不调用 AI，只输出原始消息列表")
 @click.option("--include-direct", is_flag=True, help="也包含私聊")
 @click.option("--output", "-o", type=click.Path(), help="输出文件路径")
-def week(start_str: str, end_str: str, no_ai: bool, include_direct: bool, output: str):
+@click.option("--force", is_flag=True, help="强制重新导出（即使导出文件已是最新）")
+def week(start_str: str, end_str: str, no_ai: bool, include_direct: bool, output: str,
+         force: bool):
     """生成一段时间（如本周）的群聊周报。
 
     不指定 --start 时，默认从本周一开始；--end 默认今天。
@@ -97,18 +102,23 @@ def week(start_str: str, end_str: str, no_ai: bool, include_direct: bool, output
     label = f"{start.isoformat()} ~ {end.isoformat()}"
     run_report(start, end, label, "周报", no_ai, include_direct, output,
                output_name=f"{start.isoformat()}_{end.isoformat()}",
-               min_export_days=(end - start).days + 2)
+               min_export_days=(end - start).days + 2, force=force)
 
 
 @main.command()
 @click.option("--days", "-d", type=int, default=None,
               help="回溯天数（默认取 .env 的 EXPORT_DAYS，再不行用 7）")
-def sync(days: int):
+@click.option("--force", is_flag=True, help="强制重新导出（即使导出文件已是最新）")
+def sync(days: int, force: bool):
     """只导出微信数据到 JSON，不调用 AI（可先用它刷新导出文件）"""
     config = load_config(require_ai=False)
 
     if days is None:
         days = config.export_days or 7
+
+    if not force and _is_export_fresh(config.export_json, date.today()):
+        click.echo(f"✅ 导出文件已是最新，跳过导出（{config.export_json.name}）")
+        return
 
     click.echo(f"📥 从微信导出最近 {days} 天聊天记录...")
     result = export_wechat(days, config.export_json.parent)
@@ -126,10 +136,29 @@ def _parse_date(s: str) -> date:
         sys.exit(1)
 
 
-def ensure_export(config, min_days: int | None = None) -> None:
-    """按需先导出微信数据，保证喂 AI 前数据是最新的。"""
+def _is_export_fresh(export_json: Path, target_date: date) -> bool:
+    """导出文件是否存在且足够新（mtime 不早于 target_date 当天零点，中国时区）。"""
+    if not export_json.exists():
+        return False
+    threshold = datetime.combine(target_date, time.min, tzinfo=CHINA_TZ)
+    mtime = datetime.fromtimestamp(export_json.stat().st_mtime, CHINA_TZ)
+    return mtime >= threshold
+
+
+def ensure_export(config, target_date: date, min_days: int | None = None,
+                  force: bool = False) -> None:
+    """按需先导出微信数据，保证喂 AI 前数据是最新的。
+
+    若导出文件已存在且足够新（mtime 不早于 target_date 当天零点），且未强制，
+    则打印提示并跳过导出。
+    """
     days = min_days if min_days is not None else config.export_days
     if days <= 0:
+        return
+
+    if not force and _is_export_fresh(config.export_json, target_date):
+        click.echo(f"✅ 导出文件已是最新，跳过导出（{config.export_json.name}）")
+        click.echo("")
         return
 
     click.echo(f"📥 先从微信导出最近 {days} 天聊天记录...")
@@ -143,7 +172,8 @@ def ensure_export(config, min_days: int | None = None) -> None:
 
 def run_report(start: date, end: date, label: str, kind: str,
                no_ai: bool, include_direct: bool, output: str,
-               output_name: str, min_export_days: int | None = None):
+               output_name: str, min_export_days: int | None = None,
+               force: bool = False):
     """生成日报/周报的核心流程"""
     click.echo(f"📅 生成 {label} 的群聊{kind}")
     click.echo("")
@@ -151,7 +181,7 @@ def run_report(start: date, end: date, label: str, kind: str,
     config = load_config(require_ai=not no_ai)
 
     # 先导出最新数据，再拉取（"先导出数据、再喂 AI"的一键流程）
-    ensure_export(config, min_days=min_export_days)
+    ensure_export(config, target_date=end, min_days=min_export_days, force=force)
 
     # 拉取消息（单日直接取当天，跨天则聚合）
     if start == end:
