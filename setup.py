@@ -25,6 +25,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+IS_WINDOWS = sys.platform == "win32"
+IS_MACOS = sys.platform == "darwin"
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 CHATLOG_KEEPER_REPO = "https://github.com/labazhou2024/chatlog-keeper.git"
@@ -132,13 +135,19 @@ def step_preflight() -> bool:
     info("\n[1/8] 预检环境")
     if sys.version_info < (3, 9):
         fail(f"Python 版本过低（{sys.version.split()[0]}），需要 >= 3.9")
-        info("   建议：brew install python@3.11")
+        if IS_WINDOWS:
+            info("   建议：到 python.org 安装 Python 3.11，或执行 winget install Python.Python.3.11")
+        else:
+            info("   建议：brew install python@3.11")
         return False
     ok(f"Python {sys.version.split()[0]}")
 
     if shutil.which("git") is None:
         fail("未检测到 git")
-        info("   建议：brew install git")
+        if IS_WINDOWS:
+            info("   建议：到 git-scm.com 下载安装，或执行 winget install Git.Git")
+        else:
+            info("   建议：brew install git")
         return False
     ok("git 可用")
     return True
@@ -166,8 +175,11 @@ def step_chatlog_keeper() -> bool:
     if rc != 0:
         if "externally-managed" in err:
             fail("pip 拒绝安装到系统 Python（externally-managed）")
-            info("   请改用 Homebrew Python：brew install python@3.11")
-            info("   然后用 Homebrew 的 python3 重新运行本脚本")
+            if IS_WINDOWS:
+                info("   建议：使用 python.org 官方安装的 Python，或先创建虚拟环境（venv）后重试")
+            else:
+                info("   请改用 Homebrew Python：brew install python@3.11")
+                info("   然后用 Homebrew 的 python3 重新运行本脚本")
         else:
             fail("安装 chatlog-keeper 失败")
             info(err.strip()[-2000:])
@@ -189,7 +201,10 @@ def step_wxsummary() -> bool:
     if rc != 0:
         if "externally-managed" in err:
             fail("pip 拒绝安装到系统 Python（externally-managed）")
-            info("   请改用 Homebrew Python：brew install python@3.11")
+            if IS_WINDOWS:
+                info("   建议：使用 python.org 官方安装的 Python，或先创建虚拟环境（venv）后重试")
+            else:
+                info("   请改用 Homebrew Python：brew install python@3.11")
         else:
             fail("安装 wxsummary 失败")
             info(err.strip()[-2000:])
@@ -218,13 +233,19 @@ def step_probe() -> dict | None:
     w = data.get("wechat", {})
     if w.get("error") == "probe_failed":
         fail("微信探测失败")
-        info("   请确认已安装并登录过 macOS 版微信（WeChat）。")
+        if IS_WINDOWS:
+            info("   请确认已安装并登录过 PC 版微信（Weixin 4.x）。")
+        else:
+            info("   请确认已安装并登录过 macOS 版微信（WeChat）。")
         return None
 
     # 有密钥(available=True) 或 有数据库但缺密钥(needs_key=True) 都算「检测到微信数据」。
     if not (w.get("available") or w.get("needs_key")):
         fail("未检测到微信数据")
-        info("   请确认已安装并登录过 macOS 版微信（WeChat）。")
+        if IS_WINDOWS:
+            info("   请确认已安装并登录过 PC 版微信（Weixin 4.x）。")
+        else:
+            info("   请确认已安装并登录过 macOS 版微信（WeChat）。")
         return None
     return data
 
@@ -233,10 +254,14 @@ def _explain_extract_error(error: str) -> str:
     """把 chatlog-keeper 的常见错误映射为中文指引。"""
     e = (error or "").lower()
     if "quit wechat" in e or "still running" in e or "daily wechat" in e or e == "client_running":
+        if IS_WINDOWS:
+            return "微信仍在运行。请在托盘图标右键正常退出微信，等它彻底关闭后再试（不要用任务管理器强杀）。"
         return "微信仍在运行。请从微信菜单正常退出，等它彻底关闭后再试（不要强制退出）。"
     if e == "cancelled" or "cancel" in e:
         return "提取被取消或窗口超时。请重新执行，并在弹出的微信登录窗口及时扫码确认。"
     if "signature" in e or "signed" in e or "identity" in e:
+        if IS_WINDOWS:
+            return "密钥提取失败，请确认微信已登录并重试。"
         return "macOS 签名校验失败。请尝试用 `chatlog-keeper set-key --source wechat` 手动填入密钥。"
     if "login window" in e or "qr" in e:
         return "登录窗口超时或未扫码。请在弹出的微信登录窗口用手机扫码并确认登录。"
@@ -258,9 +283,14 @@ def step_key(probe: dict) -> bool:
 
     if w.get("client_running"):
         warn("请先【完全退出微信】：")
-        info("   1. 在微信菜单栏点「微信」→「退出微信」")
-        info("   2. 等它彻底关闭（Dock 图标消失）")
-        info("   3. 不要用强制退出（Command+Option+Esc）")
+        if IS_WINDOWS:
+            info("   1. 在任务栏右下角微信托盘图标上右键 →「退出微信」")
+            info("   2. 等它彻底关闭（托盘图标从任务栏消失）")
+            info("   3. 不要用任务管理器强制结束进程")
+        else:
+            info("   1. 在微信菜单栏点「微信」→「退出微信」")
+            info("   2. 等它彻底关闭（Dock 图标消失）")
+            info("   3. 不要用强制退出（Command+Option+Esc）")
         input_confirm("   → 已退出微信后，按回车继续... ")
     else:
         info("微信当前未运行，直接提取。")

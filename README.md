@@ -45,6 +45,35 @@ bash install.sh
 
 > 提示：提取密钥后重新打开日常微信即可。脚本不会预置任何第三方 API Key。
 
+## 🪟 一键配置（Windows）
+
+一条命令完成：装 chatlog-keeper → 装本项目 → 探测微信 → 提取密钥（active）→ 首次导出 → 生成 `.env`。
+
+**最简单：双击 `install.bat`**（脚本会自动调用 PowerShell 完成安装）。
+也可以在 PowerShell 里手动运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Windows 与 macOS 的区别：
+
+- 不需要 Homebrew：使用 python.org 官方 Python（若未安装，脚本会提示用 `winget` 或官网安装）
+- 面向 **PC 版微信 Weixin 4.x**（`Weixin.exe` / `Weixin.dll`），老版 `WeChat.exe` 不支持
+- 请以**普通用户**身份运行，**不要「以管理员身份运行」**
+- 提示「退出微信」时：在任务栏右下角**托盘图标右键 → 退出微信**（不要用任务管理器强杀）
+
+脚本会自动完成：
+
+1. 预检 PowerShell / Python / git（缺失会提示安装）
+2. 克隆并安装 chatlog-keeper
+3. 安装本项目 wxsummary
+4. `probe` 探测微信状态
+5. **提取微信密钥（active 方式）**：需先完全退出微信；脚本会启动隔离的官方客户端，若弹出登录窗口用手机扫码
+6. 首次导出最近 7 天聊天记录（需重新打开微信并登录）
+7. 引导粘贴 API Key（只写本地 `.env`，不提交、不上传）
+8. 生成 `.env`
+
 ## 手动配置（备选）
 
 如果你更想手动操作，或需要排查问题，按下面步骤来。
