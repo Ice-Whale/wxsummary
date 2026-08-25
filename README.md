@@ -21,35 +21,65 @@ chatlog-keeper（微信数据库解密）          wxsummary（本项目）
 - **解密/导出**：由 chatlog-keeper 完成（一个解密本地微信库、导出成 JSON 的工具）
 - **本项目**：一条命令完成「先导出最新数据 → 按群聚合 → AI 总结」
 
-## 前置依赖
+## 🚀 一键配置（macOS，推荐）
 
-1. 安装 chatlog-keeper（负责解密并导出微信聊天记录，需自行准备）：
+一条命令完成：装 chatlog-keeper → 装本项目 → 探测微信 → 提取密钥（active）→ 首次导出 → 生成 `.env`。
+
+```bash
+bash install.sh
+# 或：./install.sh
+```
+
+脚本会自动：
+
+1. 预检 Homebrew / Python3 / git（缺失会提示安装）
+2. 克隆并安装 chatlog-keeper
+3. 安装本项目 wxsummary
+4. `probe` 探测微信状态
+5. **提取微信密钥（active 方式）**：
+   - 需**先完全退出微信**（菜单「微信」→「退出微信」，等彻底关闭，不要强制退出）
+   - 脚本会启动隔离的官方微信客户端自动登录提取，若弹出登录窗口用手机扫码
+6. 首次导出最近 7 天聊天记录（需重新打开微信并登录）
+7. 引导粘贴 API Key（只写本地 `.env`，不提交、不上传）
+8. 生成 `.env`
+
+> 提示：提取密钥后重新打开日常微信即可。脚本不会预置任何第三方 API Key。
+
+## 手动配置（备选）
+
+如果你更想手动操作，或需要排查问题，按下面步骤来。
+
+1. 安装 chatlog-keeper：
 
    ```bash
-   cd <chatlog-keeper 项目路径>
-   pip install -e .
+   git clone https://github.com/labazhou2024/chatlog-keeper.git ~/.chatlog-keeper
+   cd ~/.chatlog-keeper && pip install -e .
    ```
 
-   并保证当前环境的微信能正常导出（先跑 chatlog-keeper 的导出命令验证一次）。
+2. 提取微信密钥（先完全退出微信，再执行）：
 
-2. 安装本项目：
+   ```bash
+   python -m chatlog_keeper.cli extract-key --source wechat --method active
+   ```
+
+3. 安装本项目：
 
    ```bash
    cd wxsummary
    pip install -e .
    ```
 
-## 配置（一次性）
+4. 生成配置并填写：
 
-```bash
-cp .env.example .env
-# 编辑 .env，填：
-#   EXPORT_JSON=      chatlog-keeper 导出的 JSON 路径（改成你自己的）
-#   EXPORT_DAYS=      生成前自动导出最近多少天（默认 7；设 0 则跳过自动导出）
-#   ZHIPUAI_API_KEY=  你的 API Key（paratera / 智谱等）
-#   AI_API_BASE=      OpenAI 兼容接口地址（默认 https://ai.paratera.com/v1）
-#   ZHIPUAI_MODEL=    模型名（默认 DeepSeek-V4-Flash-0731）
-```
+   ```bash
+   cp .env.example .env
+   # 编辑 .env，填：
+   #   EXPORT_JSON=      chatlog-keeper 导出的 JSON 路径（改成你自己的）
+   #   EXPORT_DAYS=      生成前自动导出最近多少天（默认 7；设 0 则跳过自动导出）
+   #   ZHIPUAI_API_KEY=  你的 API Key（paratera / 智谱等）
+   #   AI_API_BASE=      OpenAI 兼容接口地址（默认 https://ai.paratera.com/v1）
+   #   ZHIPUAI_MODEL=    模型名（默认 DeepSeek-V4-Flash-0731）
+   ```
 
 ## 使用
 
